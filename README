@@ -1,0 +1,56 @@
+/*
+ * Water level sensor, button presser & motor controller for mister.
+ * 
+ * Copyright (C) 2021 Adam Williams <broadcast at earthling dot net>
+ * 
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
+ * 
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ * 
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+ * 
+ */
+
+
+
+
+This combines bits from 3 cheap nano misters to make an automated water
+sprayer air conditioner.  The transducers & control boards can be taken
+out of the gadgets.  Water is pumped to the transducers from an outboard
+tank.
+
+The recommended pump is a peristaltic pump.  The transducers have to
+point horizontally to let air bubbles escape.
+
+mist.X: 
+    firmware which presses all the power buttons on the control boards,
+    senses the water level & activates the pump.  Compiles with MPLAB
+
+
+mist3.FCStd:
+    The 3D printed parts to mount 3 bare transducers on an elevated stand.
+
+    cap - transducer covers
+    tank - small reservoir for the transducers
+    tank roof - houses the water level sensor & allows overflow water to leak out
+    inlet - water inlet from the pump
+    front - front of tank
+    drain - glue to back of tank to direct overflow water
+    pivot - glue to drain to bolt the tank on the stand
+    stand - vertical part of stand
+    base - horizontal part of stand
+
+
+
+
+
+
+
