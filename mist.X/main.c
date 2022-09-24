@@ -288,6 +288,8 @@ typedef union
 		unsigned interrupt_complete : 1;
 // water pump
         unsigned pwm_on : 1;
+// want the transducers on
+        unsigned want_on : 1;
 	};
 	
 	unsigned char value;
@@ -318,8 +320,8 @@ typedef struct
 #define MOTOR_ON  (CLOCKSPEED / 4 / 770)
 //#define MOTOR_ON  (CLOCKSPEED / 4 / 800)
 // water sensor values
-#define LOW_THRESHOLD 32
-#define HIGH_THRESHOLD 64
+#define LOW_THRESHOLD 20
+#define HIGH_THRESHOLD 50
 // LED is off if voltage is above this
 #define LED_OFF 220
 #define TOTAL_MISTS 3
@@ -347,11 +349,12 @@ volatile uint16_t motor_duty = 0;
 #endif
 
 // debounce the sensor
+// overflows if it debounces the high side
 volatile uint16_t water_low_counter = 0;
-volatile uint16_t water_high_counter = 0;
-#define HIGH_DEBOUNCE 0
 #define LOW_DEBOUNCE 10
 
+#define MOTOR_TIMEOUT ((uint32_t)HZ * 90)
+uint32_t motor_timeout = MOTOR_TIMEOUT;
 
 
 // UART ------------------------------------------------------------------------
@@ -504,6 +507,7 @@ int main(int argc, char** argv)
 #endif
 
     flags.value = 0;
+    flags.want_on = 1;
     init_uart();
 
     print_text("\n\n\n\nWelcome to mist\n");
@@ -615,6 +619,19 @@ void __interrupt(high_priority) isr()
             TMR0 = -TIMER0_PERIOD;
             tick++;
             analog_timer++;
+
+            if(motor_timeout > 0 && PWM_LAT)
+            {
+                motor_timeout--;
+
+// permanently stop motor & transducers after timeout
+                if(motor_timeout == 0)
+                {
+                    PWM_LAT = 0;
+                    flags.want_on = 0;
+                }
+            }
+
             if(init_delay > 0)
             {
                 init_delay--;
@@ -646,6 +663,8 @@ void __interrupt(high_priority) isr()
                 print_number(led0);
                 print_number(led1);
                 print_number(led2);
+                print_text("TIMEOUT: ");
+                print_number(motor_timeout / HZ);
                 print_text("\n");
 
 // delay until the ESC initializes
@@ -655,28 +674,21 @@ void __interrupt(high_priority) isr()
                     if(analog_accum > HIGH_THRESHOLD)
                     {
                         water_low_counter = 0;
-// overflows if it debounces the full side
-                       if(water_high_counter < HIGH_DEBOUNCE)
-                       {
-                           water_high_counter++;
-                       }
-                       else
-                       if(water_high_counter == HIGH_DEBOUNCE)
-                       {
-                            water_high_counter++;
+                        motor_timeout = MOTOR_TIMEOUT;
+                        
+                        if(PWM_LAT)
                             print_text("water high\n");
+
 #ifdef _18F2450
-                            motor_duty = MOTOR_OFF;
+                        motor_duty = MOTOR_OFF;
 #endif
 #ifdef _18F1320
-                            PWM_LAT = 0;
+                        PWM_LAT = 0;
 #endif
-                       }
                     }
                     else
-                    if(analog_accum < LOW_THRESHOLD)
+                    if(analog_accum < LOW_THRESHOLD && motor_timeout > 0)
                     {
-                        water_high_counter = 0;
                         if(water_low_counter < LOW_DEBOUNCE)
                         {
                             water_low_counter++;
@@ -698,15 +710,16 @@ void __interrupt(high_priority) isr()
                 }
 
 
-// button is down
 #define MIST_BUTTON(tris, led, ptr, text) \
 { \
+/* button is down */ \
     if(!tris) \
     { \
         ptr.button_timer += ANALOG_PERIOD; \
         if(ptr.button_timer >= BUTTON_TIME) \
         { \
             print_text(text " pressed\n"); \
+/* release button */ \
             tris = 1; \
         } \
     } \
@@ -747,7 +760,7 @@ void __interrupt(high_priority) isr()
  \
  \
  \
-    if(ptr.valid && !ptr.on) \
+    if(ptr.valid && !ptr.on && flags.want_on) \
     { \
 /* press button to start mist */ \
         tris = 0; \
@@ -759,6 +772,20 @@ void __interrupt(high_priority) isr()
         ptr.led_off_timer = 0; \
         ptr.led_on_timer = 0; \
         print_text(text " starting\n"); \
+    } \
+    else \
+    if(ptr.valid && ptr.on && !flags.want_on) \
+    { \
+/* press button to stop mist */ \
+        tris = 0; \
+        ptr.button_timer = 0; \
+/* assume it's off & retest when the button releases */ \
+/* can't know if it's really off until LED_DEBOUNCE */ \
+        ptr.on = 0; \
+/* delay the mist test until after the button is released */ \
+        ptr.led_off_timer = 0; \
+        ptr.led_on_timer = 0; \
+        print_text(text " stopping\n"); \
     } \
 }
 
@@ -833,7 +860,7 @@ void __interrupt(high_priority) isr()
         if(PIR1bits.TMR1IF)
         {
             PIR1bits.TMR1IF = 0;
-            if(flags.pwm_on)
+            if(flags.pwm_on && motor_timeout > 0)
             {
                 flags.pwm_on = 0;
                 PWM_LAT = 0;
